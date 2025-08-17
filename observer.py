@@ -14,8 +14,13 @@ class Subject(ABC):
         pass
 
     @abstractmethod
-    def notify(self) -> None:
-        """Notify all observers about an event."""
+    def notify(self, event: str, data: dict = None) -> None:
+        """Notify all observers about an event.
+
+        Args:
+            event (str): The type of event that occurred.
+            data (dict, optional): Additional data related to the event. Defaults to None.
+        """
         pass
 
 

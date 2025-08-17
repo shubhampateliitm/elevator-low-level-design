@@ -31,6 +31,16 @@ class TestElevatorCar(unittest.TestCase):
 
         self.mock_panel = Mock()
         self.mock_display = Mock()
+        
+        # Mock DatabaseManager
+        self.mock_db_manager = Mock()
+        self.mock_db_manager.load_car_state.return_value = None # Simulate no prior state
+        self.mock_db_manager.load_car_requests.return_value = [] # Simulate no prior requests
+        self.mock_db_manager.save_car_state.return_value = None # Mock save operations
+        self.mock_db_manager.save_car_requests.return_value = None # Mock save operations
+        self.mock_db_manager.clear_all_data.return_value = None # Add this line
+        self.mock_db_manager.clear_all_data() # Add this line
+
         self.elevator_car = ElevatorCar(
             car_id=1,
             num_floors=10,
@@ -38,7 +48,8 @@ class TestElevatorCar(unittest.TestCase):
             time_provider=self.time_provider,
             door=self.mock_door,
             panel=self.mock_panel,
-            display=self.mock_display
+            display=self.mock_display,
+            database_manager=self.mock_db_manager # Pass the mock DB manager
         )
 
     def test_initial_state(self):
@@ -82,6 +93,7 @@ class TestElevatorCar(unittest.TestCase):
         self.elevator_car.move() # Move to floor 1, door opens
         self.assertEqual(self.elevator_car.get_current_floor(), 1)
         self.assertTrue(self.elevator_car.door.is_open())
+        self.time_provider.advance_time(self.elevator_car.door_open_duration + 0.1) # Advance time to close door
         self.elevator_car.move() # Close the door, transition to IdleState
         self.assertIsInstance(self.elevator_car.get_state(), IdleState)
         self.assertEqual(self.elevator_car.direction, Direction.STOP)
@@ -94,6 +106,7 @@ class TestElevatorCar(unittest.TestCase):
         self.elevator_car.move() # Move to floor 4, door opens
         self.assertEqual(self.elevator_car.get_current_floor(), 4)
         self.assertTrue(self.elevator_car.door.is_open())
+        self.time_provider.advance_time(self.elevator_car.door_open_duration + 0.1) # Advance time to close door
         self.elevator_car.move() # Close the door, transition to IdleState
         self.assertIsInstance(self.elevator_car.get_state(), IdleState)
         self.assertEqual(self.elevator_car.direction, Direction.STOP)
@@ -123,6 +136,8 @@ class TestElevatorCar(unittest.TestCase):
         self.elevator_car.move() # current floor 3, door opens
         self.assertEqual(self.elevator_car.get_current_floor(), 3)
         self.assertTrue(self.elevator_car.door.is_open())
+        self.time_provider.advance_time(self.elevator_car.door_open_duration + 0.1) # Advance time to close door
+        self.elevator_car.move() # Close the door, continue moving
         self.assertEqual(self.elevator_car.up_requests, [5])
 
     def test_request_current_floor_while_moving_up(self):
@@ -153,6 +168,9 @@ class TestElevatorCar(unittest.TestCase):
         self.assertTrue(self.elevator_car.door.is_open())
         self.assertEqual(len(self.elevator_car.up_requests), 0) # All up requests should be fulfilled
         self.assertIsInstance(self.elevator_car.get_state(), IdleState) # Should be idle after fulfilling all requests
+
+if __name__ == '__main__':
+    unittest.main()
 
 if __name__ == '__main__':
     unittest.main()

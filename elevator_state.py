@@ -1,112 +1,163 @@
 
 from abc import ABC, abstractmethod
-import time
+from typing import List, Tuple, Any
 from enums import Direction, DoorState
+from commands import Command
 
 class ElevatorState(ABC):
-    def __init__(self, car):
+    """Abstract base class for all states of an elevator car (State pattern)."""
+    def __init__(self, car: object) -> None:
+        """Initializes an ElevatorState instance.
+
+        Args:
+            car (object): The ElevatorCar instance this state belongs to.
+        """
         self.car = car
 
-    def _handle_current_floor_request(self):
-        self.car._open_door_at_current_floor()
-        self.car.notify("request_fulfilled", {"floor": self.car.current_floor})
-
     @abstractmethod
-    def move(self):
+    def move(self) -> List[Tuple[Command, Any]]:
+        """Abstract method to define the movement behavior for the current state.
+        Returns a list of commands for the ElevatorCar to execute.
+        """
         pass
 
     @abstractmethod
-    def register_request(self, floor):
+    def register_request(self, floor: int) -> List[Tuple[Command, Any]]:
+        """Abstract method to define how a new request is handled in the current state.
+        Returns a list of commands for the ElevatorCar to execute.
+
+        Args:
+            floor (int): The floor number of the new request.
+        """
         pass
 
 class IdleState(ElevatorState):
-    def move(self):
-        if self.car.up_requests:
-            self.car.direction = Direction.UP
-            self.car.state = MovingUpState(self.car)
-        elif self.car.down_requests:
-            self.car.direction = Direction.DOWN
-            self.car.state = MovingDownState(self.car)
+    """Represents the idle state of an elevator car."""
+    def move(self) -> List[Tuple[Command, Any]]:
+        """Determines the next movement based on pending requests when idle."""
+        commands = []
+        if self.car.get_up_requests():
+            commands.append((Command.SET_DIRECTION, Direction.UP))
+            commands.append((Command.SET_STATE, MovingUpState(self.car)))
+        elif self.car.get_down_requests():
+            commands.append((Command.SET_DIRECTION, Direction.DOWN))
+            commands.append((Command.SET_STATE, MovingDownState(self.car)))
+        return commands
 
-    def register_request(self, floor):
-        if floor > self.car.current_floor:
-            self.car.up_requests.append(floor)
-            self.car.up_requests.sort()
-        elif floor < self.car.current_floor:
-            self.car.down_requests.append(floor)
-            self.car.down_requests.sort(reverse=True)
+    def register_request(self, floor: int) -> List[Tuple[Command, Any]]:
+        """Registers a new request when the elevator is idle.
+
+        Args:
+            floor (int): The floor number of the new request.
+        """
+        commands = []
+        current_floor = self.car.get_current_floor()
+        if floor > current_floor:
+            commands.append((Command.ADD_UP_REQUEST, floor))
+        elif floor < current_floor:
+            commands.append((Command.ADD_DOWN_REQUEST, floor))
         else:
-            self._handle_current_floor_request()
+            commands.append((Command.OPEN_DOOR_AND_NOTIFY,))
+        return commands
 
 class MovingUpState(ElevatorState):
-    def move(self):
-        if not self.car.up_requests:
-            self.car.state = IdleState(self.car)
-            self.car.direction = Direction.STOP
-            return
+    """Represents the state of an elevator car moving upwards."""
+    def move(self) -> List[Tuple[Command, Any]]:
+        """Moves the elevator car one floor up, handling stops at requested floors."""
+        commands = []
+        up_requests = self.car.get_up_requests()
+        current_floor = self.car.get_current_floor()
 
-        destination = self.car.up_requests[0]
-        if self.car.current_floor < destination:
-            self.car.current_floor += 1
+        if not up_requests:
+            commands.append((Command.SET_STATE, IdleState(self.car)))
+            commands.append((Command.SET_DIRECTION, Direction.STOP))
+            return commands
+
+        destination = up_requests[0]
+        if current_floor < destination:
+            commands.append((Command.INCREMENT_FLOOR,))
         
-        if self.car.current_floor == destination:
-            self.car.up_requests.pop(0)
-            self.car._open_door_at_current_floor()
-            self.car.notify("request_fulfilled", {"floor": self.car.current_floor})
-            if not self.car.up_requests:
-                if self.car.down_requests:
-                    self.car.direction = Direction.DOWN
-                    self.car.state = MovingDownState(self.car)
+        if current_floor + 1 == destination: # Check if next floor is destination
+            commands.append((Command.REMOVE_UP_REQUEST, destination))
+            commands.append((Command.OPEN_DOOR_AND_NOTIFY,))
+            if len(up_requests) == 1: # Check if this is the last up request
+                if self.car.get_down_requests():
+                    commands.append((Command.SET_DIRECTION, Direction.DOWN))
+                    commands.append((Command.SET_STATE, MovingDownState(self.car)))
                 else:
-                    self.car.state = IdleState(self.car)
-                    self.car.direction = Direction.STOP
+                    commands.append((Command.SET_STATE, IdleState(self.car)))
+                    commands.append((Command.SET_DIRECTION, Direction.STOP))
+        return commands
 
-    def register_request(self, floor):
-        if floor == self.car.current_floor:
-            self._handle_current_floor_request()
-        elif floor > self.car.current_floor:
-            if floor not in self.car.up_requests:
-                self.car.up_requests.append(floor)
-                self.car.up_requests.sort()
+    def register_request(self, floor: int) -> List[Tuple[Command, Any]]:
+        """Registers a new request when the elevator is moving upwards.
+
+        Args:
+            floor (int): The floor number of the new request.
+        """
+        commands = []
+        current_floor = self.car.get_current_floor()
+        if floor == current_floor:
+            commands.append((Command.OPEN_DOOR_AND_NOTIFY,))
+        elif floor > current_floor:
+            commands.append((Command.ADD_UP_REQUEST, floor))
         # Ignore requests for floors below the current floor while moving up
+        return commands
 
 class MovingDownState(ElevatorState):
-    def move(self):
-        if not self.car.down_requests:
-            self.car.state = IdleState(self.car)
-            self.car.direction = Direction.STOP
-            return
+    """Represents the state of an elevator car moving downwards."""
+    def move(self) -> List[Tuple[Command, Any]]:
+        """Moves the elevator car one floor down, handling stops at requested floors."""
+        commands = []
+        down_requests = self.car.get_down_requests()
+        current_floor = self.car.get_current_floor()
 
-        destination = self.car.down_requests[0]
-        if self.car.current_floor > destination:
-            self.car.current_floor -= 1
+        if not down_requests:
+            commands.append((Command.SET_STATE, IdleState(self.car)))
+            commands.append((Command.SET_DIRECTION, Direction.STOP))
+            return commands
 
-        if self.car.current_floor == destination:
-            self.car.down_requests.pop(0)
-            self.car._open_door_at_current_floor()
-            self.car.notify("request_fulfilled", {"floor": self.car.current_floor})
-            if not self.car.down_requests:
-                if self.car.up_requests:
-                    self.car.direction = Direction.UP
-                    self.car.state = MovingUpState(self.car)
+        destination = down_requests[0]
+        if current_floor > destination:
+            commands.append((Command.DECREMENT_FLOOR,))
+
+        if current_floor - 1 == destination: # Check if next floor is destination
+            commands.append((Command.REMOVE_DOWN_REQUEST, destination))
+            commands.append((Command.OPEN_DOOR_AND_NOTIFY,))
+            if len(down_requests) == 1: # Check if this is the last down request
+                if self.car.get_up_requests():
+                    commands.append((Command.SET_DIRECTION, Direction.UP))
+                    commands.append((Command.SET_STATE, MovingUpState(self.car)))
                 else:
-                    self.car.state = IdleState(self.car)
-                    self.car.direction = Direction.STOP
+                    commands.append((Command.SET_STATE, IdleState(self.car)))
+                    commands.append((Command.SET_DIRECTION, Direction.STOP))
+        return commands
 
-    def register_request(self, floor):
-        if floor == self.car.current_floor:
-            self._handle_current_floor_request()
-        elif floor < self.car.current_floor:
-            if floor not in self.car.down_requests:
-                self.car.down_requests.append(floor)
-                self.car.down_requests.sort(reverse=True)
+    def register_request(self, floor: int) -> List[Tuple[Command, Any]]:
+        """Registers a new request when the elevator is moving downwards.
+
+        Args:
+            floor (int): The floor number of the new request.
+        """
+        commands = []
+        current_floor = self.car.get_current_floor()
+        if floor == current_floor:
+            commands.append((Command.OPEN_DOOR_AND_NOTIFY,))
+        elif floor < current_floor:
+            commands.append((Command.ADD_DOWN_REQUEST, floor))
         # Ignore requests for floors above the current floor while moving down
+        return commands
 
 class MaintenanceState(ElevatorState):
-    def move(self):
-        # Do nothing in maintenance mode
-        pass
+    """Represents the maintenance state of an elevator car."""
+    def move(self) -> List[Tuple[Command, Any]]:
+        """In maintenance mode, the elevator does not move."""
+        return [] # Do nothing in maintenance mode
 
-    def register_request(self, floor):
-        # Do not accept requests in maintenance mode
-        pass
+    def register_request(self, floor: int) -> List[Tuple[Command, Any]]:
+        """In maintenance mode, the elevator does not accept new requests.
+
+        Args:
+            floor (int): The floor number of the new request.
+        """
+        return [] # Do not accept requests in maintenance mode

@@ -1,6 +1,7 @@
 import unittest
 import sys
 import os
+from unittest.mock import Mock
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -8,24 +9,47 @@ from elevator_system import ElevatorSystem
 from enums import Direction
 from elevator_state import MovingUpState, MovingDownState
 from dispatching_strategy import ClosestCarStrategy
+from database_manager import DatabaseManager # Import DatabaseManager
+from config import NUM_FLOORS # Import NUM_FLOORS from config
 
 class TestElevatorSystem(unittest.TestCase):
     def setUp(self):
         # Reset the Singleton instance before each test
         ElevatorSystem._instance = None
-        self.system = ElevatorSystem.get_instance(num_floors=10, num_cars=1, dispatching_strategy=ClosestCarStrategy())
+
+        # Mock DatabaseManager
+        self.mock_db_manager = Mock(spec=DatabaseManager)
+        self.mock_db_manager.load_system_state.return_value = None
+        self.mock_db_manager.load_car_state.return_value = None
+        self.mock_db_manager.load_car_requests.return_value = []
+        self.mock_db_manager.load_system_requests.return_value = []
+        self.mock_db_manager.save_system_state.return_value = None
+        self.mock_db_manager.save_car_state.return_value = None
+        self.mock_db_manager.save_car_requests.return_value = None
+        self.mock_db_manager.save_system_requests.return_value = None
+        self.mock_db_manager.close.return_value = None
+        self.mock_db_manager.clear_all_data.return_value = None # Add this line
+        self.mock_db_manager.clear_all_data() # Add this line
+
+
+        self.system = ElevatorSystem.initialize(
+            num_floors=NUM_FLOORS, # Use NUM_FLOORS from config
+            num_cars=1,
+            dispatching_strategy=ClosestCarStrategy(),
+            database_manager=self.mock_db_manager # Pass the mock DB manager
+        )
 
     def test_singleton(self):
-        system2 = ElevatorSystem.get_instance(num_floors=20, num_cars=5, dispatching_strategy=ClosestCarStrategy())
+        system2 = ElevatorSystem.get_instance()
         self.assertIs(self.system, system2)
-        self.assertEqual(self.system.num_floors, 10)
+        self.assertEqual(self.system.num_floors, NUM_FLOORS) # Assert against NUM_FLOORS from config
         self.assertEqual(self.system.num_cars, 1)
 
     def test_call_elevator(self):
         self.system.call_elevator(5, Direction.UP)
-        self.assertEqual(self.system.up_requests, [5])
+        self.assertEqual(self.system.request_manager.get_up_requests(), [5])
         self.system.call_elevator(3, Direction.DOWN)
-        self.assertEqual(self.system.down_requests, [3])
+        self.assertEqual(self.system.request_manager.get_down_requests(), [3])
 
     def test_dispatcher_idle_car(self):
         self.system.call_elevator(5, Direction.UP)
@@ -36,7 +60,7 @@ class TestElevatorSystem(unittest.TestCase):
         car.current_floor = 5 # Manually set car to destination
         car._open_door_at_current_floor() # Open door
         car.notify("request_fulfilled", {"floor": 5}) # Notify system
-        self.assertEqual(self.system.up_requests, [])
+        self.assertEqual(self.system.request_manager.get_up_requests(), [])
 
     def test_dispatcher_moving_car(self):
         car = self.system.get_cars()[0]
@@ -50,7 +74,7 @@ class TestElevatorSystem(unittest.TestCase):
         car.current_floor = 5 # Manually set car to destination
         car._open_door_at_current_floor() # Open door
         car.notify("request_fulfilled", {"floor": 5}) # Notify system
-        self.assertEqual(self.system.up_requests, [])
+        self.assertEqual(self.system.request_manager.get_up_requests(), [])
 
     def test_dispatcher_no_car_available(self):
         car = self.system.get_cars()[0]
@@ -60,7 +84,7 @@ class TestElevatorSystem(unittest.TestCase):
         self.system.call_elevator(5, Direction.UP)
         self.system.dispatcher()
         self.assertEqual(car.up_requests, [])
-        self.assertEqual(self.system.up_requests, [5])
+        self.assertEqual(self.system.request_manager.get_up_requests(), [5])
 
 if __name__ == '__main__':
     unittest.main()

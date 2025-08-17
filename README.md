@@ -13,22 +13,31 @@ This project implements a simplified elevator system using Python, demonstrating
 
 ## Project Structure
 ```
-/design_an_elevator/
+.
 ├───button.py
+├───commands.py
+├───config.py
+├───database_manager.py
 ├───dispatching_strategy.py
 ├───display.py
 ├───door.py
 ├───elevator_car.py
 ├───elevator_panel.py
+├───elevator_state.db
 ├───elevator_state.py
 ├───elevator_system.py
 ├───enums.py
 ├───floor.py
+├───logger_config.py
 ├───main.py
 ├───observer.py
-├───time_provider.py
 ├───README.md
+├───time_provider.py
+├───.git/...
+├───.vscode/
+│   └───settings.json
 └───tests/
+    ├───__init__.py
     ├───test_button.py
     ├───test_dispatching_strategy.py
     ├───test_display.py
@@ -36,7 +45,17 @@ This project implements a simplified elevator system using Python, demonstrating
     ├───test_elevator_car.py
     ├───test_elevator_panel.py
     ├───test_elevator_system.py
-    └───test_floor.py
+    ├───test_floor.py
+    └───__pycache__/
+        ├───__init__.cpython-312.pyc
+        ├───test_button.cpython-312.pyc
+        ├───test_dispatching_strategy.cpython-312.pyc
+        ├───test_display.cpython-312.pyc
+        ├───test_door.cpython-312.pyc
+        ├───test_elevator_car.cpython-312.pyc
+        ├───test_elevator_panel.cpython-312.pyc
+        ├───test_elevator_system.cpython-312.pyc
+        └───test_floor.cpython-312.pyc
 ```
 
 ## How to Run
@@ -52,6 +71,9 @@ To execute all unit tests for the project, navigate to the root directory of the
 ```bash
 python3 -m unittest discover tests
 ```
+
+**Recent Test Suite Updates:**
+The test suite, particularly `test_elevator_system.py`, has been updated to correctly handle the `ElevatorSystem` singleton initialization. Tests now use `ElevatorSystem.initialize()` for the initial setup and `ElevatorSystem.get_instance()` for subsequent retrievals. Additionally, tests now interact with the `RequestManager` (e.g., `self.system.request_manager.get_up_requests()`) for managing elevator requests, reflecting the updated architecture where `ElevatorSystem` delegates request management to `RequestManager`.
 
 ## Class Diagram
 A visual representation of the classes and their relationships.
@@ -294,18 +316,18 @@ This project extensively uses Object-Oriented Programming (OOP) principles and s
 ### Design Patterns
 
 1.  **Singleton Pattern:**
-    *   **Used in:** `ElevatorSystem`
-    *   **How:** Ensures that only one instance of `ElevatorSystem` exists throughout the application and provides a global point of access to it via `ElevatorSystem.get_instance()`.
+    *   **Used in:** `ElevatorSystem`, `DatabaseManager`
+    *   **How:** Ensures that only one instance of `ElevatorSystem` and `DatabaseManager` exists throughout the application and provides a global point of access to it via `ElevatorSystem.get_instance()` and `DatabaseManager()` respectively.
     *   **Trade-offs:** While it provides a convenient global access point, it can make testing harder due to global state and can hide dependencies. For a system like this where a single central coordinator is logical, it can be acceptable.
 
 2.  **State Pattern:**
     *   **Used in:** `ElevatorCar` and `ElevatorState` hierarchy (`IdleState`, `MovingUpState`, `MovingDownState`, `MaintenanceState`).
-    *   **How:** The `ElevatorCar`'s behavior changes based on its internal state. Instead of using large conditional statements, the behavior is encapsulated in separate state objects. The `ElevatorCar` delegates its `move()` and `register_request()` calls to its current `ElevatorState` object.
-    *   **Benefit:** Simplifies the `ElevatorCar` class by removing complex conditional logic, makes it easy to add new states, and ensures state-specific behavior is localized.
+    *   **How:** The `ElevatorCar`'s behavior changes based on its internal state. Instead of using large conditional statements, the behavior is encapsulated in separate state objects. The `ElevatorCar` delegates its `move()` and `register_request()` calls to its current `ElevatorState` object, which then returns a list of commands for the `ElevatorCar` to execute. This decouples the state logic from the car's implementation details.
+    *   **Benefit:** Simplifies the `ElevatorCar` class by removing complex conditional logic, makes it easy to add new states, and ensures state-specific behavior is localized. The command-based interaction further enhances decoupling and testability.
 
 3.  **Strategy Pattern:**
     *   **Used in:** `ElevatorSystem` and `DispatchingStrategy` hierarchy (`ClosestCarStrategy`).
-    *   **How:** Defines a family of algorithms (dispatching strategies), encapsulates each one, and makes them interchangeable. `ElevatorSystem` holds a reference to a `DispatchingStrategy` object and delegates the task of finding the best car to it.
+    *   **How:** Defines a family of algorithms (dispatching strategies), encapsulates each one, and makes them interchangeable. `ElevatorSystem` holds a reference to a `DispatchingStrategy` object and delegates the task of finding the best car to it. The strategy now interacts with `ElevatorCar` through its public interface (e.g., `get_current_floor()`, `get_direction()`, `get_up_requests()`, `get_down_requests()`), further improving encapsulation.
     *   **Benefit:** Allows the dispatching algorithm to be changed independently of the clients that use it, promoting flexibility and extensibility.
 
 4.  **Observer Pattern:**
@@ -365,6 +387,12 @@ Concurrency refers to the ability of different parts of a program to execute ind
 *   **Mocking:** Replacing parts of the system under test with mock objects that simulate the behavior of real objects. This is crucial for isolating the unit being tested from its dependencies.
     *   **Application in Code:** The `tests/` directory contains unit tests for various components. `unittest.mock.Mock` is extensively used to create mock objects (e.g., for `Door`, `ElevatorPanel`, `Display`, `TimeProvider`) to ensure that tests focus only on the logic of the component being tested, without relying on the full functionality of its dependencies.
 
+### 7. Persistence (SQLite)
+
+Persistence refers to the ability of data to outlive the process that created it. In this system, the state of the elevator cars and system-wide requests are stored in an SQLite database.
+
+*   **Application in Code:** The `database_manager.py` module handles all interactions with the `elevator_state.db` SQLite database. This allows the system to resume from its last known state even if the application is restarted.
+
 ## For Junior Software Engineers (0 to 100 Guide)
 
 Welcome to the Elevator System project! This guide will help you understand the codebase from the ground up.
@@ -403,7 +431,7 @@ Welcome to the Elevator System project! This guide will help you understand the 
 
 4.  **Car Movement (`ElevatorCar.move` and `ElevatorState`):**
     *   Also in each time step, `ElevatorCar.move()` is called for every car.
-    *   The `ElevatorCar` delegates its movement logic to its current `ElevatorState` object (State pattern).
+    *   The `ElevatorCar` delegates its movement logic to its current `ElevatorState` object (State pattern). The state object then returns a list of commands that the `ElevatorCar` executes.
     *   If the car is `Idle`, it might transition to `MovingUpState` or `MovingDownState` if it has requests.
     *   If it's `MovingUpState` or `MovingDownState`, it increments/decrements its `current_floor`.
     *   When a car reaches a requested floor, its `ElevatorState` calls `_open_door_at_current_floor()`.
@@ -422,6 +450,7 @@ Welcome to the Elevator System project! This guide will help you understand the 
 *   **`elevator_state.py`**: Crucial for understanding how elevator behavior changes. Read `ElevatorState` and its subclasses (`IdleState`, `MovingUpState`, `MovingDownState`, `MaintenanceState`).
 *   **`dispatching_strategy.py`**: See how `ClosestCarStrategy` decides which car to send.
 *   **`enums.py`**: Defines important constants like `Direction` and `DoorState`.
+*   **`commands.py`**: Defines the command enumeration used for decoupling `ElevatorState` from `ElevatorCar`.
 
 ### 4. How to Debug and Experiment
 
@@ -436,6 +465,7 @@ Welcome to the Elevator System project! This guide will help you understand the 
 *   **`enum` module:** Used for creating readable and type-safe enumerations (e.g., `Direction.UP`).
 *   **`threading.Lock`:** Used in `ElevatorSystem` to protect shared resources (`up_requests`, `down_requests`) from concurrent access issues, although in this single-threaded simulation, its primary role is to demonstrate thread-safety principles.
 *   **`unittest.mock.Mock`:** Heavily used in tests to simulate the behavior of dependent objects without needing their full implementation. This is vital for isolating components during testing.
+*   **`commands.py`**: A new module introduced to define a set of commands that `ElevatorState` objects return to `ElevatorCar`, further enhancing the decoupling of the State pattern.
 
 ## Future Enhancements
 *   **Advanced Dispatching Strategies:** Implement other strategies like Zone-based dispatching, or algorithms that minimize wait times or travel times.

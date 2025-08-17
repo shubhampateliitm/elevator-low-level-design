@@ -2,47 +2,79 @@ from abc import ABC, abstractmethod
 from enums import Direction
 
 class DispatchingStrategy(ABC):
+    """Abstract base class for elevator dispatching strategies."""
     @abstractmethod
-    def find_best_car(self, cars, floor, direction):
+    def find_best_car(self, cars: list, floor: int, direction: Direction) -> object | None:
+        """Finds the best elevator car to serve a given request.
+
+        Args:
+            cars (list): A list of available ElevatorCar objects.
+            floor (int): The floor number of the request.
+            direction (Direction): The direction of the request (UP or DOWN).
+
+        Returns:
+            object | None: The best ElevatorCar object to serve the request, or None if no suitable car is found.
+        """
         pass
 
 class ClosestCarStrategy(DispatchingStrategy):
-    def find_best_car(self, cars, floor, direction):
+    """A dispatching strategy that assigns the closest suitable elevator car to a request."""
+    def find_best_car(self, cars: list, floor: int, direction: Direction) -> object | None:
+        """Finds the closest suitable elevator car to serve a given request.
+
+        Args:
+            cars (list): A list of available ElevatorCar objects.
+            floor (int): The floor number of the request.
+            direction (Direction): The direction of the request (UP or DOWN).
+
+        Returns:
+            object | None: The closest suitable ElevatorCar object, or None if no suitable car is found.
+        """
         best_car = None
         min_distance = float('inf')
 
         for car in cars:
-            car_current_floor = car.get_current_floor()
-            car_direction = car.direction
-
-            is_suitable = False
-            distance = float('inf')
-
-            if car.is_idle():
-                is_suitable = True
-                distance = abs(car_current_floor - floor) + 0.1 # Add a small penalty to idle cars
-            elif car_direction == direction:
-                # A car moving in the correct direction is suitable if:
-                # 1. The requested floor is already in its requests.
-                # 2. It has existing requests and the requested floor is "on its way" (between current floor and furthest request).
-                # 3. It has no existing requests but is moving in the correct direction (implies it's heading to become idle or pick up a new request).
-                if direction == Direction.UP:
-                    if car_current_floor <= floor: # Car is below or at the requested floor
-                        if floor in car.up_requests or \
-                           (not car.up_requests and car_current_floor <= floor) or \
-                           (car.up_requests and floor <= max(car.up_requests)):
-                            is_suitable = True
-                            distance = abs(car_current_floor - floor)
-                elif direction == Direction.DOWN:
-                    if car_current_floor >= floor: # Car is above or at the requested floor
-                        if floor in car.down_requests or \
-                           (not car.down_requests and car_current_floor >= floor) or \
-                           (car.down_requests and floor >= min(car.down_requests)):
-                            is_suitable = True
-                            distance = abs(car_current_floor - floor)
+            is_suitable, distance = self._evaluate_car_suitability(car, floor, direction)
 
             if is_suitable and distance < min_distance:
                 min_distance = distance
                 best_car = car
         return best_car
+
+    def _evaluate_car_suitability(self, car: object, requested_floor: int, requested_direction: Direction) -> tuple[bool, float]:
+        """Evaluates if a car is suitable for a request and calculates its distance/cost.
+
+        Args:
+            car (object): The ElevatorCar object to evaluate.
+            requested_floor (int): The floor number of the request.
+            requested_direction (Direction): The direction of the request.
+
+        Returns:
+            tuple[bool, float]: A tuple containing (is_suitable, distance).
+                                is_suitable is True if the car can serve the request, False otherwise.
+                                distance is the calculated cost/distance, or float('inf') if not suitable.
+        """
+        car_current_floor = car.get_current_floor()
+        car_direction = car.get_direction()
+        
+        if car.is_idle():
+            return True, abs(car_current_floor - requested_floor) + 0.1 # Small penalty for idle cars
+        
+        if car_direction == requested_direction:
+            if requested_direction == Direction.UP:
+                if car_current_floor <= requested_floor:
+                    # Check if request is on the way or already in requests
+                    if requested_floor in car.get_up_requests() or \
+                       (not car.get_up_requests() and car_current_floor <= requested_floor) or \
+                       (car.get_up_requests() and requested_floor <= max(car.get_up_requests())):
+                        return True, abs(car_current_floor - requested_floor)
+            elif requested_direction == Direction.DOWN:
+                if car_current_floor >= requested_floor:
+                    # Check if request is on the way or already in requests
+                    if requested_floor in car.get_down_requests() or \
+                       (not car.get_down_requests() and car_current_floor >= requested_floor) or \
+                       (car.get_down_requests() and requested_floor >= min(car.get_down_requests())):
+                        return True, abs(car_current_floor - requested_floor)
+        
+        return False, float('inf') # Not suitable
 

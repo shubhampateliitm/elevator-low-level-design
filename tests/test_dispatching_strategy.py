@@ -18,11 +18,11 @@ class TestClosestCarStrategy(unittest.TestCase):
         mock_car = Mock()
         mock_car.car_id = car_id
         mock_car.get_current_floor.return_value = current_floor
-        mock_car.direction = direction
+        mock_car.get_direction.return_value = direction # Use getter
         mock_car.get_state.return_value = state_instance
         mock_car.is_idle.return_value = isinstance(state_instance, IdleState)
-        mock_car.up_requests = up_requests if up_requests is not None else []
-        mock_car.down_requests = down_requests if down_requests is not None else []
+        mock_car.get_up_requests.return_value = up_requests if up_requests is not None else [] # Use getter
+        mock_car.get_down_requests.return_value = down_requests if down_requests is not None else [] # Use getter
         return mock_car
 
     def test_find_best_car_no_cars(self):
