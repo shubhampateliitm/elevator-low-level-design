@@ -1,15 +1,18 @@
+from elevator_panel import HallPanel
+from display import Display
+from observer import Subject
+
 class Floor:
-
-    def __init__(self, floor_number, num_panels):
+    def __init__(self, floor_number, top_floor):
         self.floor_number = floor_number
-        self.panels = []
+        self.panel = HallPanel(floor_number, top_floor)
+        self.display = Display()
 
-        self.display = None
+    def get_floor_number(self):
+        return self.floor_number
 
-    def get_floor_number(self): return 0
+    def get_panel(self):
+        return self.panel
 
-    def get_panels(self): return None
-
-    def get_panel(self, index): return None
-
-    def get_display(self): return None
+    def get_display(self):
+        return self.display
